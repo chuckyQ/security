@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -22,28 +23,32 @@ const (
 	keyLength = 32
 )
 
-func GeneratePasswordHash(password string, iterations int, salt string) string {
-	hash := hashString(salt, iterations, password)
-	return fmt.Sprintf("%s:%v$%s$%s", method, iterations, salt, hash)
+func GeneratePasswordHash(password string, iterations int, salt string) (string, error) {
+	hash, err := hashString(salt, iterations, password)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%s:%v$%s$%s", method, iterations, salt, hash), nil
 }
 
-func CheckPasswordHash(password string, hash string) bool {
+func CheckPasswordHash(password string, hash string) (bool, error) {
 	if strings.Count(hash, "$") != 2 {
-		return false
+		return false, nil
 	}
 	ps := strings.Split(hash, "$")
 	headerParts := strings.Split(ps[0], ":")
 	if len(headerParts) != 3 {
-		return false
+		return false, nil
 	}
 
 	iterations := headerParts[2]
 	iters, err := strconv.Atoi(iterations)
 	if err != nil {
-		return false
+		return false, nil
 	}
 
-	return ps[2] == hashString(ps[1], iters, password)
+	hashed, err := hashString(ps[1], iters, password)
+	return ps[2] == hashed, err
 }
 
 func GenSalt(size int) string {
@@ -55,7 +60,12 @@ func GenSalt(size int) string {
 	return string(bytes)
 }
 
-func hashString(salt string, iterations int, password string) string {
+func hashString(salt string, iterations int, password string) (string, error) {
+
+	if iterations <= 0 {
+		return "", errors.New("iterations must be > 0")
+	}
+
 	hash := pbkdf2.Key([]byte(password), []byte(salt), iterations, keyLength, sha256.New)
-	return hex.EncodeToString(hash)
+	return hex.EncodeToString(hash), nil
 }
